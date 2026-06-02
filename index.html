@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ứng Dụng Chấm Điểm Phát Âm Tiếng Trung</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f5f7fb;
+            color: #333;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+        .container {
+            background-color: #ffffff;
+            padding: 30px;
+            border-radius: 16px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+            width: 100%;
+            max-width: 500px;
+            text-align: center;
+        }
+        h1 {
+            color: #4a90e2;
+            margin-bottom: 24px;
+        }
+        .phrase-box {
+            background-color: #f0f4f8;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .chinese-text {
+            font-size: 32px;
+            font-weight: bold;
+            color: #2c3e50;
+            margin: 0;
+        }
+        .pinyin-text {
+            font-size: 18px;
+            color: #7f8c8d;
+            margin: 5px 0 0 0;
+        }
+        .btn {
+            background-color: #4a90e2;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background 0.3s;
+            margin: 5px;
+        }
+        .btn:hover {
+            background-color: #357abd;
+        }
+        .btn-listen {
+            background-color: #2ecc71;
+        }
+        .btn-listen:hover {
+            background-color: #27ae60;
+        }
+        .btn-speak {
+            background-color: #e74c3c;
+        }
+        .btn-speak:hover {
+            background-color: #c0392b;
+        }
+        .btn-speak.recording {
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.05); opacity: 0.8; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .result-box {
+            margin-top: 25px;
+            padding: 15px;
+            border-radius: 8px;
+            display: none;
+        }
+        .success { background-color: #d4edda; color: #155724; }
+        .danger { background-color: #f8d7da; color: #721c24; }
+        
+        .score {
+            font-size: 24px;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Phát Âm Tiếng Trung</h1>
+    
+    <div class="phrase-box">
+        <p class="chinese-text" id="targetChinese">你好</p>
+        <p class="pinyin-text" id="targetPinyin">nǐ hǎo</p>
+    </div>
+
+    <div>
+        <button class="btn btn-listen" onclick="listenSample()">🔈 Nghe mẫu</button>
+        <button class="btn btn-speak" id="speakBtn" onclick="toggleDictation()">🎙️ Bắt đầu nói</button>
+        <button class="btn" onclick="nextPhrase()">Câu tiếp theo ➡️</button>
+    </div>
+
+    <div class="result-box" id="resultBox">
+        <p id="userTranscript"></p>
+        <div class="score" id="finalScore"></div>
+    </div>
+</div>
+
+<script>
+    // Danh sách các câu mẫu để luyện tập
+    const vocabulary = [
+        { zh: "你好", py: "nǐ hǎo" },
+        { zh: "谢谢", py: "xièxie" },
+        { zh: "我爱你", py: "wǒ ài nǐ" },
+        { zh: "你想 ăn 什么？", py: "nǐ xiǎng chī shénme?" },
+        { zh: "今天天气很好", py: "jīntiān tiānqì hěn hǎo" },
+        { zh: "中国", py: "Zhōngguó" }
+    ];
+
+    let currentIndex = 0;
+    let recognition;
+    let isRecording = false;
+
+    // Khởi tạo Speech Recognition (Nhận diện giọng nói)
+    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        recognition = new SpeechRecognition();
+        recognition.lang = 'zh-CN'; // Đặt ngôn ngữ nhận diện là tiếng Trung Quốc
+        recognition.interimResults = false;
+        recognition.maxAlternatives = 1;
+
+        recognition.onresult = function(event) {
+            const resultText = event.results[0][0].transcript;
+            const confidence = event.results[0][0].confidence;
+            analyzePronunciation(resultText, confidence);
+        };
+
+        recognition.onerror = function(event) {
+            alert("Có lỗi xảy ra khi nhận diện: " + event.error);
+            stopRecording();
+        };
+
+        recognition.onend = function() {
+            stopRecording();
+        };
+    } else {
+        alert("Trình duyệt của bạn không hỗ trợ nhận diện giọng nói. Hãy dùng Google Chrome!");
+    }
+
+    // Hàm phát âm mẫu sử dụng Google TTS API miễn phí
+    function listenSample() {
+        const text = document.getElementById('targetChinese').innerText;
+        // Sử dụng API dịch thuật/phát âm của Google
+        const ttsUrl = `https://translate.google.com/translate_tts?ie=UTF-8&tl=zh-CN&client=tw-ob&q=${encodeURIComponent(text)}`;
+        
+        const audio = new Audio(ttsUrl);
+        audio.play();
+    }
+
+    // Bật/Tắt ghi âm
+    function toggleDictation() {
+        if (!recognition) return;
+        if (isRecording) {
+            recognition.stop();
+        } else {
+            startRecording();
+        }
+    }
+
+    function startRecording() {
+        isRecording = true;
+        const btn = document.getElementById('speakBtn');
+        btn.innerText = "🛑 Đang nghe... Nói đi";
+        btn.classList.add('recording');
+        document.getElementById('resultBox').style.display = 'none';
+        recognition.start();
+    }
+
+    function stopRecording() {
+        isRecording = false;
+        const btn = document.getElementById('speakBtn');
+        btn.innerText = "🎙️ Bắt đầu nói";
+        btn.classList.remove('recording');
+    }
+
+    // Hàm chấm điểm bằng cách so sánh chuỗi chữ Hán
+    function analyzePronunciation(userText, confidence) {
+        const targetText = document.getElementById('targetChinese').innerText;
+        const resultBox = document.getElementById('resultBox');
+        const userTranscript = document.getElementById('userTranscript');
+        const finalScore = document.getElementById('finalScore');
+
+        resultBox.style.display = 'block';
+        userTranscript.innerHTML = `Bạn đã nói: <b>${userText}</b>`;
+
+        // Thuật toán chấm điểm đơn giản dựa trên sự trùng khớp ký tự và độ tự tin của API
+        if (userText === targetText) {
+            // Khớp hoàn toàn
+            let score = Math.round(confidence * 100);
+            if(score < 80) score = 85; // Bù sai số thiết bị
+            
+            resultBox.className = "result-box success";
+            finalScore.innerText = `Chính xác! Điểm: ${score}/100`;
+        } else {
+            // Không khớp hoàn toàn, tính tỷ lệ khớp ký tự
+            let matchCount = 0;
+            for(let char of userText) {
+                if(targetText.includes(char)) matchCount++;
+            }
+            
+            let matchRatio = matchCount / targetText.length;
+            let score = Math.round(matchRatio * 70); // Tối đa 70 điểm nếu phát âm gần đúng
+
+            if (score > 30) {
+                resultBox.className = "result-box success";
+                finalScore.innerText = `Gần đúng rồi! Điểm: ${score}/100`;
+            } else {
+                resultBox.className = "result-box danger";
+                finalScore.innerText = `Chưa chính xác. Điểm: ${score}/100. Hãy thử lại!`;
+            }
+        }
+    }
+
+    // Chuyển sang câu tiếp theo
+    function nextPhrase() {
+        currentIndex = (currentIndex + 1) % vocabulary.length;
+        document.getElementById('targetChinese').innerText = vocabulary[currentIndex].zh;
+        document.getElementById('targetPinyin').innerText = vocabulary[currentIndex].py;
+        document.getElementById('resultBox').style.display = 'none';
+    }
+</script>
+
+</body>
+</html>
